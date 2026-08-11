@@ -22,11 +22,28 @@ jobs:
           sudo apt-get install -y gcc-arm-none-eabi
 
       - name: Show ARM GCC version
-        run: arm-none-eabi-gcc --version
+        run: |
+          arm-none-eabi-gcc --version
 
-      - name: Build STM32 firmware
+      - name: Create build directory
         run: |
           mkdir -p build
+
+      - name: Compile STM32 source files
+        run: |
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DUSE_HAL_DRIVER \
+            -DSTM32F446xx \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Core/Src/main.c \
+            -o build/main.o
 
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
@@ -39,30 +56,95 @@ jobs:
             -IDrivers/CMSIS/Include \
             -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
             -IDrivers/STM32F4xx_HAL_Driver/Inc \
-            Core/Src/main.c \
-            Core/Src/stm32f4xx_hal_msp.c \
-            Core/Src/stm32f4xx_it.c \
-            Core/Src/syscalls.c \
-            Core/Src/sysmem.c \
-            Core/Src/system_stm32f4xx.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ramfunc.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c \
-            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
-            -c \
-            -o build/main.o
+            -c Core/Src/stm32f4xx_hal_msp.c \
+            -o build/stm32f4xx_hal_msp.o
 
-      - name: Verify build output
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DUSE_HAL_DRIVER \
+            -DSTM32F446xx \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Core/Src/stm32f4xx_it.c \
+            -o build/stm32f4xx_it.o
+
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DUSE_HAL_DRIVER \
+            -DSTM32F446xx \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Core/Src/system_stm32f4xx.c \
+            -o build/system_stm32f4xx.o
+
+      - name: Compile HAL drivers
         run: |
-          test -f build/main.o
-          echo "STM32 compilation successful."
+          for src in Drivers/STM32F4xx_HAL_Driver/Src/*.c; do
+            name=$(basename "$src" .c)
+
+            arm-none-eabi-gcc \
+              -mcpu=cortex-m4 \
+              -mthumb \
+              -mfpu=fpv4-sp-d16 \
+              -mfloat-abi=hard \
+              -DUSE_HAL_DRIVER \
+              -DSTM32F446xx \
+              -ICore/Inc \
+              -IDrivers/CMSIS/Include \
+              -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+              -IDrivers/STM32F4xx_HAL_Driver/Inc \
+              -c "$src" \
+              -o "build/$name.o"
+          done
+
+      - name: Compile startup file
+        run: |
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -c Core/Startup/startup_stm32f446retx.s \
+            -o build/startup_stm32f446retx.o
+
+      - name: Link STM32 ELF
+        run: |
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -TSTM32F446RETX_FLASH.ld \
+            -Wl,-Map=build/STM32-CICD-LED.map \
+            build/*.o \
+            -o build/STM32-CICD-LED.elf \
+            --specs=nosys.specs \
+            -Wl,--gc-sections
+
+      - name: Generate binary
+        run: |
+          arm-none-eabi-objcopy \
+            -O binary \
+            build/STM32-CICD-LED.elf \
+            build/STM32-CICD-LED.bin
+
+      - name: Show build output
+        run: |
+          ls -lh build/
+          arm-none-eabi-size build/STM32-CICD-LED.elf
+
+      - name: Verify firmware
+        run: |
+          test -f build/STM32-CICD-LED.elf
+          test -f build/STM32-CICD-LED.bin
+          echo "STM32 firmware build successful."
