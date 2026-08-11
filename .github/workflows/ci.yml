@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  build-stm32:
+  build-and-renode:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,23 +21,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi
 
-      - name: Show ARM GCC version
+      - name: Show repository contents
         run: |
-          arm-none-eabi-gcc --version
+          echo "===== PROJECT ====="
+          find . -maxdepth 3 -type f | sort
 
-      - name: Create build directory
+      - name: Build STM32 firmware
         run: |
           mkdir -p build
 
-      - name: Compile STM32 source files
-        run: |
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
-            -DUSE_HAL_DRIVER \
             -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
             -ICore/Inc \
             -IDrivers/CMSIS/Include \
             -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
@@ -50,8 +49,8 @@ jobs:
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
-            -DUSE_HAL_DRIVER \
             -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
             -ICore/Inc \
             -IDrivers/CMSIS/Include \
             -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
@@ -64,8 +63,8 @@ jobs:
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
-            -DUSE_HAL_DRIVER \
             -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
             -ICore/Inc \
             -IDrivers/CMSIS/Include \
             -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
@@ -78,8 +77,8 @@ jobs:
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
-            -DUSE_HAL_DRIVER \
             -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
             -ICore/Inc \
             -IDrivers/CMSIS/Include \
             -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
@@ -87,74 +86,80 @@ jobs:
             -c Core/Src/system_stm32f4xx.c \
             -o build/system_stm32f4xx.o
 
-      - name: Compile HAL drivers
-        run: |
-          for src in Drivers/STM32F4xx_HAL_Driver/Src/*.c; do
-            name=$(basename "$src" .c)
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
+            -o build/stm32f4xx_hal.o
 
-            arm-none-eabi-gcc \
-              -mcpu=cortex-m4 \
-              -mthumb \
-              -mfpu=fpv4-sp-d16 \
-              -mfloat-abi=hard \
-              -DUSE_HAL_DRIVER \
-              -DSTM32F446xx \
-              -ICore/Inc \
-              -IDrivers/CMSIS/Include \
-              -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-              -IDrivers/STM32F4xx_HAL_Driver/Inc \
-              -c "$src" \
-              -o "build/$name.o"
-          done
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Core/Src/syscalls.c \
+            -o build/syscalls.o
 
-      - name: Compile startup file
-        run: |
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DSTM32F446xx \
+            -DUSE_HAL_DRIVER \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            -c Core/Src/sysmem.c \
+            -o build/sysmem.o
+
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
             -c Core/Startup/startup_stm32f446retx.s \
-            -o build/startup_stm32f446retx.o
+            -o build/startup.o
 
-      - name: Link STM32 ELF
-        run: |
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
             -mthumb \
             -mfpu=fpv4-sp-d16 \
             -mfloat-abi=hard \
-            -TSTM32F446RETX_FLASH.ld \
-            -Wl,-Map=build/STM32-CICD-LED.map \
             build/*.o \
-            -o build/STM32-CICD-LED.elf \
-            --specs=nosys.specs \
-            -Wl,--gc-sections
+            -TSTM32F446RETX_FLASH.ld \
+            -Wl,--gc-sections \
+            -specs=nano.specs \
+            -specs=nosys.specs \
+            -o build/STM32-CICD-LED.elf
 
-      - name: Generate binary
-        run: |
           arm-none-eabi-objcopy \
             -O binary \
             build/STM32-CICD-LED.elf \
             build/STM32-CICD-LED.bin
-
-      - name: Show build output
-        run: |
-          ls -lh build/
-          arm-none-eabi-size build/STM32-CICD-LED.elf
 
       - name: Verify firmware
         run: |
           test -f build/STM32-CICD-LED.elf
           test -f build/STM32-CICD-LED.bin
           echo "STM32 firmware build successful."
-      - name: Download Renode
-        run: |
-          wget -q https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-dotnet.tar.gz
-          tar -xzf renode-1.16.1.linux-dotnet.tar.gz
-          mv renode-1.16.1 linux-renode
 
-           - name: Download Renode
+      - name: Download Renode
         run: |
           wget -q https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-dotnet.tar.gz
 
