@@ -3,6 +3,9 @@
 .project
 .cproject
 
+# STM32CubeMX generated metadata
+.mxproject
+
 # Build output
 Debug/
 Release/
