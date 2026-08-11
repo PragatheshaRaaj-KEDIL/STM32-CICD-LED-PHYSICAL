@@ -1,0 +1,31 @@
+# STM32CubeIDE / Eclipse
+.settings/
+.project
+.cproject
+
+# Build output
+Debug/
+Release/
+build/
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+
+# IDE/user-generated files
+*.launch
+
+# OS/editor files
+.vscode/
+.idea/
+*.swp
+*.tmp
+.DS_Store
+
+# Keep CI/CD and Renode configuration
+# tests/
+# *.resc
+# *.repl

@@ -1,0 +1,18 @@
+:name: STM32F446RE_CICD
+:description: STM32F446RE CICD LED test
+
+using sysbus
+
+$name?="STM32F446RE_CICD"
+
+mach create $name
+
+machine LoadPlatformDescription @E:/STM32/CICD-LED/f446re_cicd.repl
+
+$bin=@E:/STM32/CICD-LED/Debug/LED_CICD_01.elf
+
+sysbus LoadELF $bin
+
+showAnalyzer sysbus.usart2
+
+start

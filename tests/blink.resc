@@ -1,0 +1,21 @@
+mach create
+machine LoadPlatformDescription @E:/STM32/CICD-LED/f446re_cicd.repl
+sysbus LoadELF @E:/STM32/CICD-LED/Debug/LED_CICD_01.elf
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
+
+emulation RunFor "00:00:00.100"
+sysbus ReadDoubleWord 0x40020014
