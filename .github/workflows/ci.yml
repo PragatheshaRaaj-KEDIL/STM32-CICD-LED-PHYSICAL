@@ -9,25 +9,60 @@ on:
       - main
 
 jobs:
-  renode-blink-test:
+  build-stm32:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show repository contents
+      - name: Install ARM GCC
         run: |
-          echo "===== PROJECT ====="
-          find . -maxdepth 3 -type f | sort
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
 
-      - name: Check Renode test files
-        run: |
-          test -f tests/blink.resc
-          test -f tests/run_blink_test.ps1
-          test -f f446re_cicd.repl
+      - name: Show ARM GCC version
+        run: arm-none-eabi-gcc --version
 
-      - name: CI status
+      - name: Build STM32 firmware
         run: |
-          echo "STM32 project files found."
-          echo "Renode test files found."
+          mkdir -p build
+
+          arm-none-eabi-gcc \
+            -mcpu=cortex-m4 \
+            -mthumb \
+            -mfpu=fpv4-sp-d16 \
+            -mfloat-abi=hard \
+            -DUSE_HAL_DRIVER \
+            -DSTM32F446xx \
+            -ICore/Inc \
+            -IDrivers/CMSIS/Include \
+            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+            Core/Src/main.c \
+            Core/Src/stm32f4xx_hal_msp.c \
+            Core/Src/stm32f4xx_it.c \
+            Core/Src/syscalls.c \
+            Core/Src/sysmem.c \
+            Core/Src/system_stm32f4xx.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ramfunc.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c \
+            Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
+            -c \
+            -o build/main.o
+
+      - name: Verify build output
+        run: |
+          test -f build/main.o
+          echo "STM32 compilation successful."
