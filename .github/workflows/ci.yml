@@ -26,107 +26,60 @@ jobs:
           echo "===== PROJECT ====="
           find . -maxdepth 3 -type f | sort
 
-      - name: Build STM32 firmware
+            - name: Build STM32 firmware
         run: |
           mkdir -p build
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          CFLAGS="\
+          -mcpu=cortex-m4 \
+          -mthumb \
+          -mfpu=fpv4-sp-d16 \
+          -mfloat-abi=hard \
+          -DSTM32F446xx \
+          -DUSE_HAL_DRIVER \
+          -ICore/Inc \
+          -IDrivers/CMSIS/Include \
+          -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
+          -IDrivers/STM32F4xx_HAL_Driver/Inc"
+
+          echo "===== Compiling application ====="
+
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/main.c \
             -o build/main.o
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/stm32f4xx_hal_msp.c \
             -o build/stm32f4xx_hal_msp.o
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/stm32f4xx_it.c \
             -o build/stm32f4xx_it.o
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/system_stm32f4xx.c \
             -o build/system_stm32f4xx.o
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
-            -c Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
-            -o build/stm32f4xx_hal.o
-
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/syscalls.c \
             -o build/syscalls.o
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -DSTM32F446xx \
-            -DUSE_HAL_DRIVER \
-            -ICore/Inc \
-            -IDrivers/CMSIS/Include \
-            -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
-            -IDrivers/STM32F4xx_HAL_Driver/Inc \
+          arm-none-eabi-gcc $CFLAGS \
             -c Core/Src/sysmem.c \
             -o build/sysmem.o
+
+          echo "===== Compiling STM32 HAL ====="
+
+          for file in Drivers/STM32F4xx_HAL_Driver/Src/*.c
+          do
+            name=$(basename "$file" .c)
+
+            arm-none-eabi-gcc $CFLAGS \
+              -c "$file" \
+              -o "build/${name}.o"
+          done
+
+          echo "===== Compiling startup ====="
 
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
@@ -135,6 +88,8 @@ jobs:
             -mfloat-abi=hard \
             -c Core/Startup/startup_stm32f446retx.s \
             -o build/startup.o
+
+          echo "===== Linking firmware ====="
 
           arm-none-eabi-gcc \
             -mcpu=cortex-m4 \
@@ -148,10 +103,15 @@ jobs:
             -specs=nosys.specs \
             -o build/STM32-CICD-LED.elf
 
+          echo "===== Generating BIN ====="
+
           arm-none-eabi-objcopy \
             -O binary \
             build/STM32-CICD-LED.elf \
             build/STM32-CICD-LED.bin
+
+          echo "===== Firmware files ====="
+          ls -lh build/
 
       - name: Verify firmware
         run: |
