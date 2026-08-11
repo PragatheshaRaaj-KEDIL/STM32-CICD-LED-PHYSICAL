@@ -1,0 +1,33 @@
+name: STM32 CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  renode-blink-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show repository contents
+        run: |
+          echo "===== PROJECT ====="
+          find . -maxdepth 3 -type f | sort
+
+      - name: Check Renode test files
+        run: |
+          test -f tests/blink.resc
+          test -f tests/run_blink_test.ps1
+          test -f f446re_cicd.repl
+
+      - name: CI status
+        run: |
+          echo "STM32 project files found."
+          echo "Renode test files found."
