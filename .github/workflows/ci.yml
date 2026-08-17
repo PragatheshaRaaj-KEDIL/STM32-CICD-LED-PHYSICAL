@@ -12,59 +12,125 @@ jobs:
   build-flash-test:
     runs-on: [self-hosted, Windows, X64]
 
+    defaults:
+      run:
+        shell: pwsh
+
     steps:
-      # ------------------------------------------------------------
-      # 1. Checkout
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 1. CHECKOUT
+      # ============================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # 2. Show environment
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 2. SHOW ENVIRONMENT
+      # ============================================================
       - name: Show environment
-        shell: powershell
         run: |
-          Write-Host "===== STM32 PHYSICAL CI ====="
-          Write-Host "Computer: $env:COMPUTERNAME"
-          Write-Host "User: $env:USERNAME"
-          Write-Host "Working directory: $env:GITHUB_WORKSPACE"
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "=========================================="
+          Write-Host "       STM32 PHYSICAL HARDWARE CI"
+          Write-Host "=========================================="
 
           Write-Host ""
-          Write-Host "===== ARM GCC ====="
-          & "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe" --version
+          Write-Host "Computer:"
+          Write-Host $env:COMPUTERNAME
 
           Write-Host ""
-          Write-Host "===== STM32 PROGRAMMER ====="
-          & "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe" --version
+          Write-Host "User:"
+          Write-Host $env:USERNAME
 
-      # ------------------------------------------------------------
-      # 3. Build firmware
-      # ------------------------------------------------------------
+          Write-Host ""
+          Write-Host "Workspace:"
+          Write-Host $env:GITHUB_WORKSPACE
+
+          Write-Host ""
+          Write-Host "PowerShell:"
+          $PSVersionTable
+
+          Write-Host ""
+          Write-Host "Execution Policy:"
+          Get-ExecutionPolicy -List
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "ARM GCC"
+          Write-Host "=========================================="
+
+          $gcc = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe"
+
+          if (!(Test-Path $gcc)) {
+              throw "ARM GCC not found: $gcc"
+          }
+
+          & $gcc --version
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "ARM GCC failed."
+          }
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "STM32CubeProgrammer"
+          Write-Host "=========================================="
+
+          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
+
+          if (!(Test-Path $cli)) {
+              throw "STM32CubeProgrammer not found: $cli"
+          }
+
+          & $cli --version
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "STM32CubeProgrammer CLI failed."
+          }
+
+          Write-Host ""
+          Write-Host "ENVIRONMENT CHECK PASSED."
+
+
+      # ============================================================
+      # 3. BUILD STM32 FIRMWARE
+      # ============================================================
       - name: Build STM32 firmware
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
           $gcc = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe"
           $objcopy = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-objcopy.exe"
 
+          if (!(Test-Path $gcc)) {
+              throw "GCC not found: $gcc"
+          }
+
+          if (!(Test-Path $objcopy)) {
+              throw "objcopy not found: $objcopy"
+          }
+
           New-Item -ItemType Directory -Force -Path build | Out-Null
 
           $CFLAGS = @(
-            "-mcpu=cortex-m4"
-            "-mthumb"
-            "-mfpu=fpv4-sp-d16"
-            "-mfloat-abi=hard"
-            "-DSTM32F446xx"
-            "-DUSE_HAL_DRIVER"
-            "-ICore/Inc"
-            "-IDrivers/CMSIS/Include"
-            "-IDrivers/CMSIS/Device/ST/STM32F4xx/Include"
-            "-IDrivers/STM32F4xx_HAL_Driver/Inc"
+              "-mcpu=cortex-m4"
+              "-mthumb"
+              "-mfpu=fpv4-sp-d16"
+              "-mfloat-abi=hard"
+              "-DSTM32F446xx"
+              "-DUSE_HAL_DRIVER"
+              "-ICore/Inc"
+              "-IDrivers/CMSIS/Include"
+              "-IDrivers/CMSIS/Device/ST/STM32F4xx/Include"
+              "-IDrivers/STM32F4xx_HAL_Driver/Inc"
           )
 
-          Write-Host "===== Compiling application ====="
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "COMPILING APPLICATION"
+          Write-Host "=========================================="
 
           & $gcc @CFLAGS -c Core/Src/main.c -o build/main.o
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -84,68 +150,103 @@ jobs:
           & $gcc @CFLAGS -c Core/Src/sysmem.c -o build/sysmem.o
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          Write-Host "===== Compiling STM32 HAL ====="
 
-          Get-ChildItem "Drivers/STM32F4xx_HAL_Driver/Src/*.c" | ForEach-Object {
-              $name = $_.BaseName
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "COMPILING STM32 HAL"
+          Write-Host "=========================================="
 
-              Write-Host "Compiling $($_.Name)"
+          $halFiles = Get-ChildItem "Drivers/STM32F4xx_HAL_Driver/Src/*.c"
 
-              & $gcc @CFLAGS -c $_.FullName -o "build/$name.o"
+          foreach ($file in $halFiles) {
+
+              $name = $file.BaseName
+
+              Write-Host "Compiling $($file.Name)"
+
+              & $gcc @CFLAGS `
+                  -c $file.FullName `
+                  -o "build/$name.o"
 
               if ($LASTEXITCODE -ne 0) {
                   exit $LASTEXITCODE
               }
           }
 
-          Write-Host "===== Compiling startup ====="
-
-          & $gcc `
-            -mcpu=cortex-m4 `
-            -mthumb `
-            -mfpu=fpv4-sp-d16 `
-            -mfloat-abi=hard `
-            -c Core/Startup/startup_stm32f446retx.s `
-            -o build/startup.o
-
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          Write-Host "===== Linking firmware ====="
-
-          $objects = Get-ChildItem "build/*.o" | ForEach-Object { $_.FullName }
-
-          & $gcc `
-            -mcpu=cortex-m4 `
-            -mthumb `
-            -mfpu=fpv4-sp-d16 `
-            -mfloat-abi=hard `
-            $objects `
-            "-TSTM32F446RETX_FLASH.ld" `
-            "-Wl,--gc-sections" `
-            "-specs=nano.specs" `
-            "-specs=nosys.specs" `
-            -o build/STM32-CICD-LED.elf
-
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          Write-Host "===== Generating BIN ====="
-
-          & $objcopy `
-            -O binary `
-            build/STM32-CICD-LED.elf `
-            build/STM32-CICD-LED.bin
-
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           Write-Host ""
-          Write-Host "===== Firmware ====="
+          Write-Host "=========================================="
+          Write-Host "COMPILING STARTUP"
+          Write-Host "=========================================="
+
+          & $gcc `
+              -mcpu=cortex-m4 `
+              -mthumb `
+              -mfpu=fpv4-sp-d16 `
+              -mfloat-abi=hard `
+              -c Core/Startup/startup_stm32f446retx.s `
+              -o build/startup.o
+
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "LINKING FIRMWARE"
+          Write-Host "=========================================="
+
+          $objects = Get-ChildItem "build/*.o" |
+              ForEach-Object { $_.FullName }
+
+          & $gcc `
+              -mcpu=cortex-m4 `
+              -mthumb `
+              -mfpu=fpv4-sp-d16 `
+              -mfloat-abi=hard `
+              $objects `
+              "-TSTM32F446RETX_FLASH.ld" `
+              "-Wl,--gc-sections" `
+              "-specs=nano.specs" `
+              "-specs=nosys.specs" `
+              -o build/STM32-CICD-LED.elf
+
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "GENERATING BIN"
+          Write-Host "=========================================="
+
+          & $objcopy `
+              -O binary `
+              build/STM32-CICD-LED.elf `
+              build/STM32-CICD-LED.bin
+
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "FIRMWARE OUTPUT"
+          Write-Host "=========================================="
+
           Get-ChildItem build
 
-      # ------------------------------------------------------------
-      # 4. Verify firmware exists
-      # ------------------------------------------------------------
+          Write-Host ""
+          Write-Host "BUILD SUCCESS."
+
+
+      # ============================================================
+      # 4. VERIFY FIRMWARE
+      # ============================================================
       - name: Verify firmware
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -157,96 +258,136 @@ jobs:
               throw "BIN firmware was not created."
           }
 
-          Write-Host "Firmware build successful."
+          $elf = Get-Item "build/STM32-CICD-LED.elf"
+          $bin = Get-Item "build/STM32-CICD-LED.bin"
 
-      # ------------------------------------------------------------
-      # 5. Detect STM32 programmer
-      # ------------------------------------------------------------
+          Write-Host "ELF size: $($elf.Length) bytes"
+          Write-Host "BIN size: $($bin.Length) bytes"
+
+          Write-Host ""
+          Write-Host "FIRMWARE VERIFICATION PASSED."
+
+
+      # ============================================================
+      # 5. DETECT STM32 PROGRAMMER
+      # ============================================================
       - name: Detect STM32 programmer
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
           $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 
           if (!(Test-Path $cli)) {
-              throw "STM32_Programmer_CLI.exe not found: $cli"
+              throw "STM32_Programmer_CLI.exe not found."
           }
 
-          Write-Host "STM32 Programmer found:"
+          Write-Host "STM32CubeProgrammer:"
           Write-Host $cli
 
           & $cli --version
 
-      # ------------------------------------------------------------
-      # 6. Detect ST-Link / STM32
-      # ------------------------------------------------------------
+          if ($LASTEXITCODE -ne 0) {
+              throw "STM32 Programmer CLI failed."
+          }
+
+          Write-Host "STM32 PROGRAMMER CHECK PASSED."
+
+
+      # ============================================================
+      # 6. DETECT PHYSICAL STM32 / ST-LINK
+      # ============================================================
       - name: Detect STM32 hardware
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "===== PNP DEVICES ====="
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "PRESENT ST-LINK / STM32 DEVICES"
+          Write-Host "=========================================="
 
-          Get-PnpDevice |
-            Where-Object {
-              $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
-            } |
-            Format-Table Status,Class,FriendlyName
+          $devices = Get-PnpDevice -PresentOnly |
+              Where-Object {
+                  $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
+              }
+
+          if ($devices.Count -eq 0) {
+              Write-Host "WARNING: No ST-Link/STM32 PnP device detected."
+          }
+          else {
+              $devices |
+                  Format-Table Status,Class,FriendlyName
+          }
 
           Write-Host ""
-          Write-Host "===== USB DEVICES ====="
+          Write-Host "Hardware enumeration completed."
 
-          Get-PnpDevice -PresentOnly |
-            Where-Object {
-              $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
-            } |
-            Format-Table Status,Class,FriendlyName
 
-      # ------------------------------------------------------------
-      # 7. Flash physical STM32
-      # ------------------------------------------------------------
+      # ============================================================
+      # 7. FLASH PHYSICAL STM32
+      # ============================================================
       - name: Flash physical STM32
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
           $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
-          $firmware = "$env:GITHUB_WORKSPACE\build\STM32-CICD-LED.bin"
+          $firmware = Join-Path $env:GITHUB_WORKSPACE "build\STM32-CICD-LED.bin"
 
           if (!(Test-Path $firmware)) {
               throw "Firmware not found: $firmware"
           }
 
-          Write-Host "===== FLASHING PHYSICAL STM32 ====="
-          Write-Host "Firmware: $firmware"
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "FLASHING PHYSICAL STM32"
+          Write-Host "=========================================="
 
-          & $cli -c port=SWD -w $firmware 0x08000000 -v -rst
+          Write-Host "Firmware:"
+          Write-Host $firmware
+
+          Write-Host ""
+          Write-Host "Connecting through ST-Link SWD..."
+
+          & $cli `
+              -c port=SWD `
+              -w $firmware 0x08000000 `
+              -v `
+              -rst
 
           if ($LASTEXITCODE -ne 0) {
-              throw "STM32 programming failed with exit code $LASTEXITCODE"
+              throw "STM32 programming failed. Exit code: $LASTEXITCODE"
           }
 
+          Write-Host ""
           Write-Host "STM32 FLASH SUCCESS."
 
-      # ------------------------------------------------------------
-      # 8. Wait for firmware to start
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 8. WAIT FOR STM32
+      # ============================================================
       - name: Wait for STM32
-        shell: powershell
         run: |
           Write-Host "Waiting for STM32 firmware to start..."
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 3
+          Write-Host "STM32 should now be running."
 
-      # ------------------------------------------------------------
-      # 9. Run Saleae physical capture + timing analysis
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 9. SALEAE PHYSICAL TEST
+      # ============================================================
       - name: Run physical Saleae test
-        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "===== STM32 PHYSICAL HARDWARE TEST ====="
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "STM32 PHYSICAL SALEAE TEST"
+          Write-Host "=========================================="
+
+          if (!(Test-Path "tests/run_physical_test.py")) {
+              throw "tests/run_physical_test.py not found."
+          }
+
+          python --version
 
           python tests/run_physical_test.py
 
@@ -254,11 +395,13 @@ jobs:
               throw "Physical hardware timing test FAILED."
           }
 
-          Write-Host "Physical hardware timing test PASSED."
+          Write-Host ""
+          Write-Host "PHYSICAL HARDWARE TEST PASSED."
 
-      # ------------------------------------------------------------
-      # 10. Upload Saleae result as GitHub artifact
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 10. UPLOAD SALEAE RESULTS
+      # ============================================================
       - name: Upload Saleae results
         if: always()
         uses: actions/upload-artifact@v4
@@ -268,9 +411,10 @@ jobs:
             test-results/saleae/**
           if-no-files-found: warn
 
-      # ------------------------------------------------------------
-      # 11. Upload firmware as GitHub artifact
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 11. UPLOAD FIRMWARE
+      # ============================================================
       - name: Upload firmware
         if: success()
         uses: actions/upload-artifact@v4
