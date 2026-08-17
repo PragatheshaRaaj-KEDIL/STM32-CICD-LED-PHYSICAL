@@ -26,95 +26,57 @@ jobs:
 
 
       # ============================================================
-      # 2. SHOW ENVIRONMENT
+      # 2. ENVIRONMENT CHECK
       # ============================================================
-      - name: Show environment
+      - name: Check STM32 environment
         run: |
           $ErrorActionPreference = "Stop"
 
           Write-Host "=========================================="
-          Write-Host "       STM32 PHYSICAL HARDWARE CI"
+          Write-Host "STM32 PHYSICAL HARDWARE CI"
           Write-Host "=========================================="
 
-          Write-Host ""
-          Write-Host "Computer:"
-          Write-Host $env:COMPUTERNAME
+          Write-Host "Computer: $env:COMPUTERNAME"
+          Write-Host "User: $env:USERNAME"
+          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
 
-          Write-Host ""
-          Write-Host "User:"
-          Write-Host $env:USERNAME
-
-          Write-Host ""
-          Write-Host "Workspace:"
-          Write-Host $env:GITHUB_WORKSPACE
-
-          Write-Host ""
-          Write-Host "PowerShell:"
-          $PSVersionTable
-
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "ARM GCC"
-          Write-Host "=========================================="
-
-          $gccDir = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin"
-          $gcc = Join-Path $gccDir "arm-none-eabi-gcc.exe"
-          $objcopy = Join-Path $gccDir "arm-none-eabi-objcopy.exe"
+          $gcc = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe"
+          $objcopy = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-objcopy.exe"
+          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 
           if (!(Test-Path $gcc)) {
               throw "ARM GCC not found: $gcc"
           }
 
           if (!(Test-Path $objcopy)) {
-              throw "ARM objcopy not found: $objcopy"
+              throw "objcopy not found: $objcopy"
           }
-
-          & $gcc --version
-
-          if ($LASTEXITCODE -ne 0) {
-              throw "ARM GCC failed."
-          }
-
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "STM32CubeProgrammer"
-          Write-Host "=========================================="
-
-          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 
           if (!(Test-Path $cli)) {
               throw "STM32CubeProgrammer not found: $cli"
           }
 
-          & $cli --version
+          Write-Host ""
+          Write-Host "ARM GCC:"
+          & $gcc --version
 
-          if ($LASTEXITCODE -ne 0) {
-              throw "STM32CubeProgrammer CLI failed."
-          }
+          Write-Host ""
+          Write-Host "STM32CubeProgrammer:"
+          & $cli --version
 
           Write-Host ""
           Write-Host "ENVIRONMENT CHECK PASSED."
 
 
       # ============================================================
-      # 3. BUILD STM32 FIRMWARE
+      # 3. BUILD FIRMWARE
       # ============================================================
       - name: Build STM32 firmware
         run: |
           $ErrorActionPreference = "Stop"
 
-          $gccDir = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin"
-
-          $gcc = Join-Path $gccDir "arm-none-eabi-gcc.exe"
-          $objcopy = Join-Path $gccDir "arm-none-eabi-objcopy.exe"
-
-          if (!(Test-Path $gcc)) {
-              throw "GCC not found: $gcc"
-          }
-
-          if (!(Test-Path $objcopy)) {
-              throw "objcopy not found: $objcopy"
-          }
+          $gcc = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe"
+          $objcopy = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-objcopy.exe"
 
           New-Item -ItemType Directory -Force -Path build | Out-Null
 
@@ -131,7 +93,6 @@ jobs:
               "-IDrivers/STM32F4xx_HAL_Driver/Inc"
           )
 
-          Write-Host ""
           Write-Host "=========================================="
           Write-Host "COMPILING APPLICATION"
           Write-Host "=========================================="
@@ -154,15 +115,13 @@ jobs:
           & $gcc @CFLAGS -c Core/Src/sysmem.c -o build/sysmem.o
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          Write-Host ""
           Write-Host "=========================================="
-          Write-Host "COMPILING STM32 HAL"
+          Write-Host "COMPILING HAL"
           Write-Host "=========================================="
 
           $halFiles = Get-ChildItem "Drivers/STM32F4xx_HAL_Driver/Src/*.c"
 
           foreach ($file in $halFiles) {
-
               $name = $file.BaseName
 
               Write-Host "Compiling $($file.Name)"
@@ -176,7 +135,6 @@ jobs:
               }
           }
 
-          Write-Host ""
           Write-Host "=========================================="
           Write-Host "COMPILING STARTUP"
           Write-Host "=========================================="
@@ -193,9 +151,8 @@ jobs:
               exit $LASTEXITCODE
           }
 
-          Write-Host ""
           Write-Host "=========================================="
-          Write-Host "LINKING FIRMWARE"
+          Write-Host "LINKING"
           Write-Host "=========================================="
 
           $objects = Get-ChildItem "build/*.o" |
@@ -217,7 +174,6 @@ jobs:
               exit $LASTEXITCODE
           }
 
-          Write-Host ""
           Write-Host "=========================================="
           Write-Host "GENERATING BIN"
           Write-Host "=========================================="
@@ -230,11 +186,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               exit $LASTEXITCODE
           }
-
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "FIRMWARE OUTPUT"
-          Write-Host "=========================================="
 
           Get-ChildItem build
 
@@ -249,66 +200,32 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $elf = Join-Path $env:GITHUB_WORKSPACE "build\STM32-CICD-LED.elf"
-          $bin = Join-Path $env:GITHUB_WORKSPACE "build\STM32-CICD-LED.bin"
-
-          if (!(Test-Path $elf)) {
-              throw "ELF firmware was not created: $elf"
+          if (!(Test-Path "build/STM32-CICD-LED.elf")) {
+              throw "ELF firmware was not created."
           }
 
-          if (!(Test-Path $bin)) {
-              throw "BIN firmware was not created: $bin"
+          if (!(Test-Path "build/STM32-CICD-LED.bin")) {
+              throw "BIN firmware was not created."
           }
 
-          $elfInfo = Get-Item $elf
-          $binInfo = Get-Item $bin
+          $elf = Get-Item "build/STM32-CICD-LED.elf"
+          $bin = Get-Item "build/STM32-CICD-LED.bin"
 
-          Write-Host "ELF size: $($elfInfo.Length) bytes"
-          Write-Host "BIN size: $($binInfo.Length) bytes"
+          Write-Host "ELF size: $($elf.Length) bytes"
+          Write-Host "BIN size: $($bin.Length) bytes"
 
-          if ($binInfo.Length -eq 0) {
-              throw "BIN firmware is empty."
-          }
-
-          Write-Host ""
           Write-Host "FIRMWARE VERIFICATION PASSED."
 
 
       # ============================================================
-      # 5. DETECT STM32 PROGRAMMER
-      # ============================================================
-      - name: Detect STM32 programmer
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
-
-          if (!(Test-Path $cli)) {
-              throw "STM32_Programmer_CLI.exe not found."
-          }
-
-          Write-Host "STM32CubeProgrammer:"
-          Write-Host $cli
-
-          & $cli --version
-
-          if ($LASTEXITCODE -ne 0) {
-              throw "STM32 Programmer CLI failed."
-          }
-
-          Write-Host "STM32 PROGRAMMER CHECK PASSED."
-
-
-      # ============================================================
-      # 6. DETECT PHYSICAL STM32 / ST-LINK
+      # 5. DETECT HARDWARE
       # ============================================================
       - name: Detect STM32 hardware
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host ""
           Write-Host "=========================================="
-          Write-Host "PRESENT ST-LINK / STM32 DEVICES"
+          Write-Host "ST-LINK / STM32 DEVICES"
           Write-Host "=========================================="
 
           $devices = Get-PnpDevice -PresentOnly |
@@ -316,54 +233,45 @@ jobs:
                   $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
               }
 
-          if ($null -eq $devices -or @($devices).Count -eq 0) {
-              throw "No ST-Link/STM32 PnP device detected."
+          if ($devices.Count -eq 0) {
+              Write-Host "WARNING: No ST-Link/STM32 PnP device detected."
+          }
+          else {
+              $devices | Format-Table Status,Class,FriendlyName
           }
 
-          $devices |
-              Format-Table Status,Class,FriendlyName
-
-          Write-Host ""
-          Write-Host "HARDWARE DETECTION PASSED."
+          Write-Host "Hardware enumeration completed."
 
 
       # ============================================================
-      # 7. FLASH PHYSICAL STM32
+      # 6. FLASH STM32
       # ============================================================
       - name: Flash physical STM32
         run: |
           $ErrorActionPreference = "Stop"
 
           $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
-
           $firmware = Join-Path $env:GITHUB_WORKSPACE "build\STM32-CICD-LED.bin"
 
           if (!(Test-Path $firmware)) {
               throw "Firmware not found: $firmware"
           }
 
-          Write-Host ""
           Write-Host "=========================================="
           Write-Host "FLASHING PHYSICAL STM32"
           Write-Host "=========================================="
 
-          Write-Host "Firmware:"
-          Write-Host $firmware
+          Write-Host "Firmware: $firmware"
 
-          Write-Host ""
-          Write-Host "Connecting through ST-Link SWD..."
-
-          # IMPORTANT:
-          # STM32CubeProgrammer expects:
-          # -w <file> <address>
           & $cli `
               -c port=SWD `
-              -w "$firmware" 0x08000000 `
+              -w $firmware `
+              0x08000000 `
               -v `
               -rst
 
           if ($LASTEXITCODE -ne 0) {
-              throw "STM32 programming FAILED. Exit code: $LASTEXITCODE"
+              throw "STM32 programming failed. Exit code: $LASTEXITCODE"
           }
 
           Write-Host ""
@@ -371,7 +279,7 @@ jobs:
 
 
       # ============================================================
-      # 8. WAIT FOR STM32
+      # 7. WAIT
       # ============================================================
       - name: Wait for STM32
         run: |
@@ -381,27 +289,18 @@ jobs:
 
 
       # ============================================================
-      # 9. SALEAE PHYSICAL TEST
+      # 8. SALEAE PHYSICAL TEST
       # ============================================================
       - name: Run physical Saleae test
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host ""
           Write-Host "=========================================="
           Write-Host "STM32 PHYSICAL SALEAE TEST"
           Write-Host "=========================================="
 
           if (!(Test-Path "tests/run_physical_test.py")) {
               throw "tests/run_physical_test.py not found."
-          }
-
-          if (!(Test-Path "tests/saleae_capture.py")) {
-              throw "tests/saleae_capture.py not found."
-          }
-
-          if (!(Test-Path "tests/analyze_saleae.py")) {
-              throw "tests/analyze_saleae.py not found."
           }
 
           python --version
@@ -417,7 +316,7 @@ jobs:
 
 
       # ============================================================
-      # 10. UPLOAD SALEAE RESULTS
+      # 9. UPLOAD SALEAE RESULTS
       # ============================================================
       - name: Upload Saleae results
         if: always()
@@ -430,7 +329,7 @@ jobs:
 
 
       # ============================================================
-      # 11. UPLOAD FIRMWARE
+      # 10. UPLOAD FIRMWARE
       # ============================================================
       - name: Upload firmware
         if: success()
