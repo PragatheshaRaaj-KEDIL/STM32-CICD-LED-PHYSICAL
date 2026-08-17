@@ -1,4 +1,4 @@
-name: STM32 CI
+name: STM32 Physical Hardware CI
 
 on:
   push:
@@ -9,106 +9,273 @@ on:
       - main
 
 jobs:
-  build-and-renode:
-    runs-on: ubuntu-latest
+  build-flash-test:
+    runs-on: [self-hosted, Windows, X64]
 
     steps:
+      # ------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install ARM GCC
+      # ------------------------------------------------------------
+      # 2. Show environment
+      # ------------------------------------------------------------
+      - name: Show environment
+        shell: powershell
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi
+          Write-Host "===== STM32 PHYSICAL CI ====="
+          Write-Host "Computer: $env:COMPUTERNAME"
+          Write-Host "User: $env:USERNAME"
+          Write-Host "Working directory: $env:GITHUB_WORKSPACE"
 
-      - name: Show repository contents
-        run: |
-          echo "===== PROJECT ====="
-          find . -maxdepth 3 -type f | sort
+          Write-Host ""
+          Write-Host "===== ARM GCC ====="
+          & "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe" --version
 
+          Write-Host ""
+          Write-Host "===== STM32 PROGRAMMER ====="
+          & "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe" --version
+
+      # ------------------------------------------------------------
+      # 3. Build firmware
+      # ------------------------------------------------------------
       - name: Build STM32 firmware
+        shell: powershell
         run: |
-          mkdir -p build
+          $ErrorActionPreference = "Stop"
 
-          CFLAGS="-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -DSTM32F446xx -DUSE_HAL_DRIVER -ICore/Inc -IDrivers/CMSIS/Include -IDrivers/CMSIS/Device/ST/STM32F4xx/Include -IDrivers/STM32F4xx_HAL_Driver/Inc"
+          $gcc = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-gcc.exe"
+          $objcopy = "C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi\12.2 mpacbti-rel1\bin\arm-none-eabi-objcopy.exe"
 
-          echo "===== Compiling application ====="
+          New-Item -ItemType Directory -Force -Path build | Out-Null
 
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/main.c -o build/main.o
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/stm32f4xx_hal_msp.c -o build/stm32f4xx_hal_msp.o
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/stm32f4xx_it.c -o build/stm32f4xx_it.o
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/system_stm32f4xx.c -o build/system_stm32f4xx.o
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/syscalls.c -o build/syscalls.o
-          arm-none-eabi-gcc $CFLAGS -c Core/Src/sysmem.c -o build/sysmem.o
+          $CFLAGS = @(
+            "-mcpu=cortex-m4"
+            "-mthumb"
+            "-mfpu=fpv4-sp-d16"
+            "-mfloat-abi=hard"
+            "-DSTM32F446xx"
+            "-DUSE_HAL_DRIVER"
+            "-ICore/Inc"
+            "-IDrivers/CMSIS/Include"
+            "-IDrivers/CMSIS/Device/ST/STM32F4xx/Include"
+            "-IDrivers/STM32F4xx_HAL_Driver/Inc"
+          )
 
-          echo "===== Compiling STM32 HAL ====="
+          Write-Host "===== Compiling application ====="
 
-          for file in Drivers/STM32F4xx_HAL_Driver/Src/*.c
-          do
-            name=$(basename "$file" .c)
-            arm-none-eabi-gcc $CFLAGS -c "$file" -o "build/${name}.o"
-          done
+          & $gcc @CFLAGS -c Core/Src/main.c -o build/main.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          echo "===== Compiling startup ====="
+          & $gcc @CFLAGS -c Core/Src/stm32f4xx_hal_msp.c -o build/stm32f4xx_hal_msp.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            -c Core/Startup/startup_stm32f446retx.s \
+          & $gcc @CFLAGS -c Core/Src/stm32f4xx_it.c -o build/stm32f4xx_it.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $gcc @CFLAGS -c Core/Src/system_stm32f4xx.c -o build/system_stm32f4xx.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $gcc @CFLAGS -c Core/Src/syscalls.c -o build/syscalls.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $gcc @CFLAGS -c Core/Src/sysmem.c -o build/sysmem.o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Write-Host "===== Compiling STM32 HAL ====="
+
+          Get-ChildItem "Drivers/STM32F4xx_HAL_Driver/Src/*.c" | ForEach-Object {
+              $name = $_.BaseName
+
+              Write-Host "Compiling $($_.Name)"
+
+              & $gcc @CFLAGS -c $_.FullName -o "build/$name.o"
+
+              if ($LASTEXITCODE -ne 0) {
+                  exit $LASTEXITCODE
+              }
+          }
+
+          Write-Host "===== Compiling startup ====="
+
+          & $gcc `
+            -mcpu=cortex-m4 `
+            -mthumb `
+            -mfpu=fpv4-sp-d16 `
+            -mfloat-abi=hard `
+            -c Core/Startup/startup_stm32f446retx.s `
             -o build/startup.o
 
-          echo "===== Linking firmware ====="
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          arm-none-eabi-gcc \
-            -mcpu=cortex-m4 \
-            -mthumb \
-            -mfpu=fpv4-sp-d16 \
-            -mfloat-abi=hard \
-            build/*.o \
-            -TSTM32F446RETX_FLASH.ld \
-            -Wl,--gc-sections \
-            -specs=nano.specs \
-            -specs=nosys.specs \
+          Write-Host "===== Linking firmware ====="
+
+          $objects = Get-ChildItem "build/*.o" | ForEach-Object { $_.FullName }
+
+          & $gcc `
+            -mcpu=cortex-m4 `
+            -mthumb `
+            -mfpu=fpv4-sp-d16 `
+            -mfloat-abi=hard `
+            $objects `
+            "-TSTM32F446RETX_FLASH.ld" `
+            "-Wl,--gc-sections" `
+            "-specs=nano.specs" `
+            "-specs=nosys.specs" `
             -o build/STM32-CICD-LED.elf
 
-          echo "===== Generating BIN ====="
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          arm-none-eabi-objcopy \
-            -O binary \
-            build/STM32-CICD-LED.elf \
+          Write-Host "===== Generating BIN ====="
+
+          & $objcopy `
+            -O binary `
+            build/STM32-CICD-LED.elf `
             build/STM32-CICD-LED.bin
 
-          echo "===== Firmware files ====="
-          ls -lh build/
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          Write-Host ""
+          Write-Host "===== Firmware ====="
+          Get-ChildItem build
+
+      # ------------------------------------------------------------
+      # 4. Verify firmware exists
+      # ------------------------------------------------------------
       - name: Verify firmware
+        shell: powershell
         run: |
-          test -f build/STM32-CICD-LED.elf
-          test -f build/STM32-CICD-LED.bin
-          echo "STM32 firmware build successful."
+          $ErrorActionPreference = "Stop"
 
-      - name: Download Renode
+          if (!(Test-Path "build/STM32-CICD-LED.elf")) {
+              throw "ELF firmware was not created."
+          }
+
+          if (!(Test-Path "build/STM32-CICD-LED.bin")) {
+              throw "BIN firmware was not created."
+          }
+
+          Write-Host "Firmware build successful."
+
+      # ------------------------------------------------------------
+      # 5. Detect STM32 programmer
+      # ------------------------------------------------------------
+      - name: Detect STM32 programmer
+        shell: powershell
         run: |
-          wget -q https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-dotnet.tar.gz
+          $ErrorActionPreference = "Stop"
 
-          mkdir -p renode
-          tar -xzf renode-1.16.1.linux-dotnet.tar.gz -C renode
+          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 
-          echo "===== Renode files ====="
-          find renode -maxdepth 3 -type f | sort
+          if (!(Test-Path $cli)) {
+              throw "STM32_Programmer_CLI.exe not found: $cli"
+          }
 
-      - name: Run Renode test
+          Write-Host "STM32 Programmer found:"
+          Write-Host $cli
+
+          & $cli --version
+
+      # ------------------------------------------------------------
+      # 6. Detect ST-Link / STM32
+      # ------------------------------------------------------------
+      - name: Detect STM32 hardware
+        shell: powershell
         run: |
-          RENODE=$(find renode -type f -name renode | head -n 1)
+          $ErrorActionPreference = "Stop"
 
-          if [ -z "$RENODE" ]; then
-            echo "ERROR: Renode executable not found."
-            exit 1
-          fi
+          Write-Host "===== PNP DEVICES ====="
 
-          chmod +x "$RENODE"
+          Get-PnpDevice |
+            Where-Object {
+              $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
+            } |
+            Format-Table Status,Class,FriendlyName
 
-          echo "Using Renode: $RENODE"
-          "$RENODE" --console --disable-xwt --execute "include @tests/blink_ci.resc"
+          Write-Host ""
+          Write-Host "===== USB DEVICES ====="
+
+          Get-PnpDevice -PresentOnly |
+            Where-Object {
+              $_.FriendlyName -match "ST-Link|STM32|STMicroelectronics"
+            } |
+            Format-Table Status,Class,FriendlyName
+
+      # ------------------------------------------------------------
+      # 7. Flash physical STM32
+      # ------------------------------------------------------------
+      - name: Flash physical STM32
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $cli = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
+          $firmware = "$env:GITHUB_WORKSPACE\build\STM32-CICD-LED.bin"
+
+          if (!(Test-Path $firmware)) {
+              throw "Firmware not found: $firmware"
+          }
+
+          Write-Host "===== FLASHING PHYSICAL STM32 ====="
+          Write-Host "Firmware: $firmware"
+
+          & $cli -c port=SWD -w $firmware 0x08000000 -v -rst
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "STM32 programming failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "STM32 FLASH SUCCESS."
+
+      # ------------------------------------------------------------
+      # 8. Wait for firmware to start
+      # ------------------------------------------------------------
+      - name: Wait for STM32
+        shell: powershell
+        run: |
+          Write-Host "Waiting for STM32 firmware to start..."
+          Start-Sleep -Seconds 2
+
+      # ------------------------------------------------------------
+      # 9. Run Saleae physical capture + timing analysis
+      # ------------------------------------------------------------
+      - name: Run physical Saleae test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "===== STM32 PHYSICAL HARDWARE TEST ====="
+
+          python tests/run_physical_test.py
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Physical hardware timing test FAILED."
+          }
+
+          Write-Host "Physical hardware timing test PASSED."
+
+      # ------------------------------------------------------------
+      # 10. Upload Saleae result as GitHub artifact
+      # ------------------------------------------------------------
+      - name: Upload Saleae results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32-saleae-results
+          path: |
+            test-results/saleae/**
+          if-no-files-found: warn
+
+      # ------------------------------------------------------------
+      # 11. Upload firmware as GitHub artifact
+      # ------------------------------------------------------------
+      - name: Upload firmware
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32-firmware
+          path: |
+            build/STM32-CICD-LED.elf
+            build/STM32-CICD-LED.bin
